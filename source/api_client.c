@@ -32,6 +32,7 @@ int openConnection(const char* sockname, int msec, const struct timespec abstime
     struct timeval now;
     gettimeofday(&now, NULL);
     abstime.tv_sec = now.tv_sec+msec;
+    abstime.tv_nsec = (now.tv_usec+1000UL*1)*1000UL;
     fd_sk = socket(AF_UNIX, SOCK_STREAM, 0);
     struct sockaddr_un sa;
     strcpy(sa.sun_path, sockname);
