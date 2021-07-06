@@ -4,7 +4,7 @@
 #include "../lib/my_string.h"
 #include "../lib/list2.h"
 
-list1 *list_create(){
+list1 *list2_create(){
     list2 *l = malloc(sizeof(list));
     if(l == NULL){
         fprintf(stderr, "Impossible to allocate the list\n");
@@ -43,7 +43,7 @@ void insert_tail(node **tail, char *pid_client){
     *tail = element;
 }
 
-bool list_remove(list2 **l, char *pid_client){
+bool list2_remove(list2 **l, char *pid_client){
     node **head = &(*l)->head;
 
     node *curr = *head;
@@ -90,11 +90,11 @@ bool list_remove(list2 **l, char *pid_client){
     return false;
 }
 
-bool list_isEmpty(list2 *l){
+bool list2_isEmpty(list2 *l){
     return l->length == 0;
 }
 
-void list_destroy(list2 **l){
+void list2_destroy(list2 **l){
     while((*l)->head != NULL){
         node *curr = (*l)->head;
         free(curr->pid_client);
@@ -106,7 +106,7 @@ void list_destroy(list2 **l){
     free((*l));
 }
 
-void list_insert(list2 **l, char *pid_client){
+void list2_insert(list2 **l, char *pid_client){
     char *dup_pid = str_create(pid_client);
 
     if((*l)->head == NULL){
@@ -119,7 +119,7 @@ void list_insert(list2 **l, char *pid_client){
     (*l)->length++;
 }
 
-node* list_getNode(list2 *l, char *pid_client){
+node* list2_getNode(list2 *l, char *pid_client){
     node *head = l->head;
     node *tail = l->tail;
 
@@ -144,10 +144,10 @@ node* list_getNode(list2 *l, char *pid_client){
     return NULL;
 }
 
-int list_getLength(list2 *l){
+int list2_getLength(list2 *l){
     return l->length;
 }
 
-bool list_containsKey(list2 *l, char *pid_client){
-    return list_getNode(l, pid_client) != NULL;
+bool list2_containsKey(list2 *l, char *pid_client){
+    return list2_getNode(l, pid_client) != NULL;
 }

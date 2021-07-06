@@ -5,12 +5,12 @@ typedef struct TreeNode2{
     list2 *pid_clients;
     struct TreeNode2* left;
     struct TreeNode2* right;
-}treeNode2;
+}TreeNode2;
 
 #if !defined(MY_TREE2.H)
 #define MY_TREE2.H
 
-TreeNode2* makeEmpty(TreeNode2* root);
+TreeNode2* makeEmpty2(TreeNode2* root);
 TreeNode2* insertFileAndPid(TreeNode2* root, char* pathname, char* pid_client);
 TreeNode2* findFileAndPid(TreeNode2* root, char* pathname, char* pid_client);
 TreeNode2* deleteFile(TreeNode2* root, char* pathname);

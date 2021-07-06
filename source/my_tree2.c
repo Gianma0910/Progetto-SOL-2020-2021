@@ -10,14 +10,14 @@
 
 pthread_mutex_t tree_lock = PTHREAD_MUTEX_INITIALIZER;
 
-TreeNode2* makeEmpty(TreeNode2* root){
+TreeNode2* makeEmpty2(TreeNode2* root){
     pthread_mutex_lock(&tree_lock);
 
     if(root != NULL){
         pthread_mutex_unlock(&tree_lock);
-        makeEmpty(root->left);
+        makeEmpty2(root->left);
         pthread_mutex_unlock(&tree_lock);
-        makeEmpty(root->right);
+        makeEmpty2(root->right);
         free(root);
     }
 

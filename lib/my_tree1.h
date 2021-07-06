@@ -9,7 +9,7 @@ typedef struct TreeNode1{
 #if !defined(MY_TREE1.H)
 #define MY_TREE1.H
 
-TreeNode1* makeEmpty(TreeNode1* root);
+TreeNode1* makeEmpty1(TreeNode1* root);
 TreeNode1* insertFile(TreeNode1* root, char* pathname, void* buffer);
 TreeNode1* findFile(TreeNode1* root, char* pathname);
 TreeNode1* deleteFile(TreeNode1* root, char* pathname);

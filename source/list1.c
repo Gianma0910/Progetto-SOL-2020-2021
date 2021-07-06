@@ -4,7 +4,7 @@
 #include "../lib/my_string.h"
 #include "../lib/list1.h"
 
-list1 *list_create(){
+list1 *list1_create(){
     list1 *l = malloc(sizeof(list));
     if(l == NULL){
         fprintf(stderr, "Impossible to allocate the list\n");
@@ -17,8 +17,8 @@ list1 *list_create(){
     return l;
 }
 
-void insert_head(node **head, char *key, void *value){
-    node *element = (node *) malloc(sizeof(node));
+void insert_head(node1 **head, char *key, void *value){
+    node1 *element = (node1 *) malloc(sizeof(node1));
     if(element == NULL){
         fprintf(stderr, "Impossible create a new node\n");
         exit(errno);
@@ -30,8 +30,8 @@ void insert_head(node **head, char *key, void *value){
     *head = element;
 }
 
-void insert_tail(node **tail, char *key, void *value){
-    node *element = (node *) malloc(sizeof(node));
+void insert_tail(node1 **tail, char *key, void *value){
+    node1 *element = (node1 *) malloc(sizeof(node1));
 
     if(element == NULL){
         fprintf(stderr, "Impossible create a new node\n");
@@ -45,11 +45,11 @@ void insert_tail(node **tail, char *key, void *value){
     *tail = element;
 }
 
-bool list_remove(list1 **l, char *key, void (*delete_value)(void *value)){
-    node **head = &(*l)->head;
+bool list1_remove(list1 **l, char *key, void (*delete_value)(void *value)){
+    node1 **head = &(*l)->head;
 
-    node *curr = *head;
-    node *succ = (*head)->next;
+    node1 *curr = *head;
+    node1 *succ = (*head)->next;
 
     if(str_equals(curr->key, key)){
         *head = curr->next;
@@ -96,13 +96,13 @@ bool list_remove(list1 **l, char *key, void (*delete_value)(void *value)){
     return false;
 }
 
-bool list_isEmpty(list1 *l){
+bool list1_isEmpty(list1 *l){
     return l->length == 0 || l->head == NULL;
 }
 
-void list_destroy(list1 **l, void (*delete_value)(void *value)){
+void list1_destroy(list1 **l, void (*delete_value)(void *value)){
     while((*l)->head != NULL){
-        node *curr = (*l)->head;
+        node1 *curr = (*l)->head;
         free(curr->key);
         if(delete_value != NULL)
             delete_value(curr->value);
@@ -114,7 +114,7 @@ void list_destroy(list1 **l, void (*delete_value)(void *value)){
     free((*l));
 }
 
-void list_insert(list1 **l, char *key, void *value){
+void list1_insert(list1 **l, char *key, void *value){
     char *dup_key = str_create(key);
 
     if((*l)->head == NULL){
@@ -127,9 +127,9 @@ void list_insert(list1 **l, char *key, void *value){
     (*l)->length++;
 }
 
-node* list_getNode(list1 *l, char *key){
-    node *head = l->head;
-    node *tail = l->tail;
+node1* list1_getNode(list1 *l, char *key){
+    node1 *head = l->head;
+    node1 *tail = l->tail;
 
     if(head == NULL){
         return NULL;
@@ -152,10 +152,10 @@ node* list_getNode(list1 *l, char *key){
     return NULL;
 }
 
-int list_getLength(list1 *l){
+int list1_getLength(list1 *l){
     return l->length;
 }
 
-bool list_containsKey(list1 *l, char *key){
-    return list_getNode(l, key) != NULL;
+bool list1_containsKey(list1 *l, char *key){
+    return list1_getNode(l, key) != NULL;
 }

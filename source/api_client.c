@@ -14,7 +14,7 @@
 #include "../lib/file_reader.h"
 #include "../lib/client_api.h"
 
-bool running = true;
+bool run = true;
 int fd_sk = 0;
 char* current_sock = NULL;
 bool connected = false;
