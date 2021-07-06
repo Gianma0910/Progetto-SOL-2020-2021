@@ -46,9 +46,9 @@ void print_files(char* key, void* value, bool *exit, void *argv){
     file_s *f = (file_s*) value;
     printf("[");
     if(f->size == 0){
-
+        //...
     }else{
-
+        //...
     }
     printf("]");
 
@@ -248,3 +248,89 @@ void openFile(int client, char* request){
     str_clearArray(&array, n);
 }
 
+void createFile(int client, char* request){
+    size_t file_size = receiveInteger(client);
+
+    char **array = NULL;
+    int n = str_split(&array, request, ":");
+    char* file_path = array[0];
+    char* client_pid = array[1];
+
+    assert(!str_isEmpty(file_path) && file_path != NULL);
+
+    if(findFile(storage_file, file_path) != NULL){
+        if(configuration_storage.PRINT_LOG == 2){
+            fprintf(stderr, "The client %d want create the file %s, but it's already exists into the server\n", client, (strrchr(file_path, '/')+1));
+        }
+        if(configuration_storage.PRINT_LOG == 1){
+            fprintf(stderr, "Can't execute the request");
+        }
+        sendStr(client, "File already exists");
+    }else if(file_size > configuration_storage.MAX_STORAGE_SPACE){
+        if(configuration_storage.PRINT_LOG == 2){
+            fprintf(stderr, "The client %d want to put into the server a file too large of size\n", client);
+        }
+        if(configuration_storage.PRINT_LOG == 1){
+            fprintf(stderr, "Can't execute the request");
+        }
+        sendStr(client, "File too large");
+    }else if(max_storable_files == 0){
+        if(configuration_storage.PRINT_LOG == 2){
+            fprintf(stderr, "CAPACITY MISSES\n");
+        }
+        sendStr(client, "Storage full of memory");
+        free_space(client, 'c', 0);
+        if(max_storable_files == 0){
+            if(configuration_storage.PRINT_LOG == 2){
+                fprintf(stderr, "Impossible to expel file from server\n");
+            }
+            if(configuration_storage.PRINT_LOG == 1){
+                fprintf(stderr, "Can't execute the request");
+            }
+            sendStr(client, "Storage full of memory");
+        }
+    }else{
+        //da rivedere l'assert
+        assert(findFileAndPid(opened_file, file_path, client_pid) != NULL);
+
+        file_s *file = file_initialization(file_path);
+
+        if(file == NULL){
+            sendStr(client, "Malloc error");
+            return;
+        }
+        insertFile(storage_file, file_path, file);
+        file_open(&file, client_pid);
+
+        max_storable_files--;
+        list1_insert(&fifo_list, file_path, file);
+        sendStr("Success");
+    }
+    str_clearArray(&array, n);
+}
+
+void readFile(int client, char* request){
+    assert(!str_isEmpty(request) && request != NULL);
+
+    char** array = NULL;
+    int n = str_split(&array, request, ":");
+    char* file_path = array[0];
+    char* client_pid = array[1];
+
+    if(findFile(storage_file, file_path) == NULL){
+        sendStr(client, "File not exists");
+        str_clearArray(&array, n);
+        return;
+    }
+    file_s *file = findFile(storage_file, file_path);
+
+    if(!file_isOpenedBy(file, client_pid)){
+        sendStr(client, "File not opened");
+        str_clearArray(&array, n);
+        return;
+    }
+
+    sendStr(client,"Already exists");
+    sendn(client, file->buffer, file->size);
+    str_clearArray(&array, n);
+}

@@ -32,7 +32,7 @@ TreeNode2* insertFileAndPid(TreeNode2* root, char* pathname, char* pid_client){
     if(root == NULL){
         root = malloc(sizeof(TreeNode2));
         strncpy(root->pathname, pathname, str_length(pathname));
-        list_insert(&(root->pid_clients), pid_client);
+        list2_insert(&(root->pid_clients), pid_client);
         root->left = NULL;
         root->right = NULL;
     }else if(strncmp(pathname, root->pathname, str_length(pathname)) > 0){
@@ -61,7 +61,7 @@ TreeNode2* findFileAndPid(TreeNode2* root, char* pathname, char* pid_client){
         pthread_mutex_unlock(&tree_lock);
         return findFileAndPid(root->left, pathname, pid_client);
     }else{
-        if(list_containsKey(root->pid_clients, pid_client) == true){
+        if(list2_containsKey(root->pid_clients, pid_client) == true){
             pthread_mutex_unlock(&tree_lock);
             return root;
         }else{
@@ -150,7 +150,7 @@ TreeNode2* findFileAndDeletePid(TreeNode2 *root, char* pathname, char* pid_clien
         return findFileAndPid(root->left, pathname, pid_client);
     }else {
         pthread_mutex_unlock(&tree_lock);
-        list_remove(root->pid_clients, pid_client);
+        list2_remove(&root->pid_clients, pid_client);
         return;
     }
 }
