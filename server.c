@@ -1,12 +1,10 @@
 #define _GNU_SOURCE_
+#include "lib/my_tree.h"
 #include "lib/config_parser.h"
-#include "lib/my_tree1.h"
-#include "lib/my_tree2.h"
-#include "lib/list1.h"
-#include "lib/list2.h"
+#include "lib/conn.h"
+#include "lib/my_string.h"
 #include "lib/sorted_list.h"
 #include "lib/queue.h"
-#include "lib/my_string.h"
 #include <stdio.h>
 #include <pthread.h>
 #include <signal.h>
@@ -14,7 +12,7 @@
 #include <limits.h>
 #include <sys/time.h>
 #include <stdlib.h>
-#include "lib/conn.h"
+
 
 #define MASTER_WAKEUP_SECONDS 10
 #define MASTER_WAKEUP_MS 0
@@ -24,11 +22,11 @@ bool server_running = true;
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-TreeNode1 *storage_file;
-TreeNode2 *opened_file;
+TreeNode *storage_file; //contiene tutti i file associati al loro path assoluto
+TreeNode *opened_file; //memorizza quanti file un determinato client ha aperto
 settings configuration_storage = DEFAULT_SETTINGS;
 queue *q;
-list1 *fifo_list;
+list *fifo_list;
 size_t storage_space;
 size_t max_storable_files;
 size_t fifo_counts = 0;
@@ -39,7 +37,7 @@ typedef struct{
     char* pathname;
     void* buffer;
     size_t size;
-    list2 *pid_list;
+    list *pid_list;
 }file_s;
 
 void print_files(char* key, void* value, bool *exit, void *argv){
@@ -70,8 +68,8 @@ static file_s* file_initialization(char* path){
     }
     file->pathname = str_create(path);
     file->size = 0;
-    file->buffer = NULL;
-    file->pid_list = list2_create();
+    file->buffer = 0;
+    file->pid_list = list_create();
     return file;
 }
 
@@ -92,26 +90,40 @@ bool file_isEmpty(file_s *f){
 }
 
 bool file_isOpenedBy(file_s *f, char* pid_client){
-    return list2_containsKey(f->pid_list, pid_client);
+    return list_containsKey(f->pid_list, pid_client);
 }
 
 bool file_isOpened(file_s *f){
-    return !list2_isEmpty(f->pid_list);
+    return !list_isEmpty(f->pid_list);
 }
 
 void file_open(file_s **f, char* pid_client){
-    list2_insert(&(*f)->pid_list, pid_client);
+    list_insert(&(*f)->pid_list, pid_client);
+
+    TreeNode* elem = findFile(opened_file, pid_client);
+
+    int *n = (int *) elem->value;
+    *n += 1;
+
+    opened_file = updateValue(opened_file, pid_client, n);
 }
 
 void file_clientClose(file_s **f, char* pid_client){
-    list2_remove(&(*f)->pid_list, pid_client);
+    list_remove(&(*f)->pid_list, pid_client, NULL);
+
+    TreeNode* elem = findFile(opened_file, pid_client);
+
+    int *n = (int *) elem->value;
+    *n += 1;
+
+    opened_file = updateValue(opened_file, pid_client, n);
 }
 
 void file_destroy(void *f){
     file_s *file = (file_s *) f;
     free(file->buffer);
     free(file->pathname);
-    list2_destroy(&file->pid_list);
+    list_destroy(&file->pid_list, NULL);
     free(file);
 }
 
@@ -122,7 +134,7 @@ void initialization_server(char* config_path){
     q = queue_create();
     max_storable_files = configuration_storage.MAX_STORABLE_FILES;
     storage_space = configuration_storage.MAX_STORAGE_SPACE;
-    fifo_list = list1_create();
+    fifo_list = list_create();
     pipe(pipe_fd);
 
     if(configuration_storage.MAX_STORAGE_SPACE >= INT_MAX){
@@ -143,16 +155,16 @@ void initialization_server(char* config_path){
 
 void close_server(){
     settings_free(&configuration_storage);
-    makeEmpty1(storage_file);
-    makeEmpty2(opened_file);
+    makeEmpty(storage_file);
+    makeEmpty(opened_file);
     close(pipe_fd[0]);
     close(pipe_fd[1]);
-    list1_destroy(&fifo_list);
+    list_destroy(&fifo_list, NULL);
     queue_destroy(&q);
 }
 
 void free_space(int client, char option, size_t file_size){
-    node1 *curr = fifo_list->head;
+    node *curr = fifo_list->head;
 
     while(true){
         if(curr == NULL){
@@ -168,7 +180,7 @@ void free_space(int client, char option, size_t file_size){
 
         if(!file_isOpened(file)){
             if(configuration_storage.PRINT_LOG == 2){
-                printf("Delete the file %s from the queue\n", (strrchr(file->pathname, '/')+1));
+                printf("Deleting the file %s from the queue\n", (strrchr(file->pathname, '/')+1));
             }
 
             if(option == 'y'){
@@ -188,13 +200,13 @@ void free_space(int client, char option, size_t file_size){
             }
 
             //delete file->path from storage_files
-            deleteFile(&storage_file, file->pathname);
+            storage_file = deleteFile(storage_file, file->pathname);
             max_storable_files++;
             fifo_counts++;
 
             char* key = curr->key;
             curr = curr->next;
-            list1_remove(&fifo_list, key, NULL);
+            list_remove(&fifo_list, key, NULL);
         }else{
             curr = curr->next;
         }
@@ -291,7 +303,7 @@ void createFile(int client, char* request){
         }
     }else{
         //da rivedere l'assert
-        assert(findFileAndPid(opened_file, file_path, client_pid) != NULL);
+        assert(findFile(opened_file, client_pid) != NULL);
 
         file_s *file = file_initialization(file_path);
 
@@ -299,11 +311,11 @@ void createFile(int client, char* request){
             sendStr(client, "Malloc error");
             return;
         }
-        insertFile(storage_file, file_path, file);
+        storage_file = insertFile(storage_file, file_path, file);
         file_open(&file, client_pid);
 
         max_storable_files--;
-        list1_insert(&fifo_list, file_path, file);
+        list_insert(&fifo_list, file_path, file);
         sendStr("Success");
     }
     str_clearArray(&array, n);
@@ -333,4 +345,243 @@ void readFile(int client, char* request){
     sendStr(client,"Already exists");
     sendn(client, file->buffer, file->size);
     str_clearArray(&array, n);
+}
+
+void send_nfiles(char* key, void* value, bool* exit, void* args){
+    int client = *((int*) args);
+    file_s *file = (file_s *) value;
+    sendStr(client, "Not end of file from storage");
+    sendStr(client, key);
+    sendn(client, file->buffer, file->size);
+
+    exit = exit;
+    args = args;
+}
+
+void readNFile(int client, char* request){
+    if(tree_isEmpty(storage_file)){
+        sendStr(client, "Storage empty");
+        return;
+    }
+
+    int n;
+    int res = str_toInteger(&n, request);
+    assert(res != -1);
+
+    sendStr(client, "No problem of request");
+    //tree_iterateN
+    sendStr(client, "End of file from storage");
+}
+
+void appendFile(int client, char* request) {
+    char **array = NULL;
+    int n = str_split(&array, request, ":");
+    char *file_path = array[0];
+    char *pid_client = array[1];
+    char option = (array[2])[0];
+
+    assert(option == 'y' || option == 'n');
+
+    void *file_content;
+    size_t file_size;
+    receiveFile(client, &file_content, &file_size);
+    file_s *file = findFile(storage_file, file_path);
+
+    if ((file->size + file_size) > configuration_storage.MAX_STORAGE_SPACE) {
+        if (configuration_storage.PRINT_LOG == 2) {
+            fprintf(stderr, "The client %d sent a file, but it is too large\n\n", client);
+        }
+
+        sendStr(client, "File too large");
+        free(file_content);
+        return;
+    }
+
+    if (findFile(storage_file, file_path) == NULL) {
+        if (configuration_storage.PRINT_LOG == 2) {
+            fprintf(stderr, "The client %d want to execute an operation on not existing file\n", client);
+        }
+
+        sendStr(client, "File not exists");
+        free(file_content);
+        str_clearArray(&array, n);
+        return;
+    }
+
+    if (file_size > storage_space) {
+        if (configuration_storage.PRINT_LOG == 2) {
+            fprintf(stderr, "CAPACITY MISSES\n");
+        }
+
+        sendStr(client, "Storage full of memory");
+        free_space(client, option, file_size);
+
+        if (file_size >= storage_space) {
+            if (configuration_storage.PRINT_LOG == 1 || configuration_storage.PRINT_LOG == 2) {
+                fprintf(stderr, "Is not possible to free space\n\n");
+            }
+            free(file_content);
+            str_clearArray(&array, n);
+            sendStr(client, "Free error");
+            return;
+        }
+
+        if (configuration_storage.PRINT_LOG == 2) {
+            printf("Space freed\n");
+        }
+    }
+
+    size_t  new_size = file->size + file_size;
+    void *new_content = malloc(new_size);
+    if(new_content == NULL){
+        fprintf(stderr, "Malloc error: impossible to append the new content");
+        sendStr(client, "Malloc error");
+        return;
+    }
+
+    memcpy(new_content, file->buffer, file->size);
+    memcpy(new_content + file->size, file_size);
+
+    free(file->buffer);
+    file->buffer = new_content;
+    file->size = file_size;
+    sendStr(client, "Success");
+
+    if(configuration_storage.PRINT_LOG == 1 || configuration_storage.PRINT_LOG == 2){
+        printf("Append for client %d\n\n", client);
+    }
+}
+
+void writeFile(int client, char* request){
+    char **array = NULL;
+    int n = str_split(&array, request, ":");
+    assert(n == 3);
+    char* file_path = array[0];
+    char* pid_client = array[1];
+
+    char option = (array[2])[0];
+    assert(option == 'y' || option == 'n');
+    size_t file_size;
+    void* file_content = NULL;
+
+    receiveFile(client, &file_content, &file_size);
+
+    if (file_size > configuration_storage.MAX_STORAGE_SPACE) {
+        if (configuration_storage.PRINT_LOG == 2) {
+            fprintf(stderr, "The client %d sent a file, but it is too large\n\n", client);
+        }
+
+        sendStr(client, "File too large");
+        free(file_content);
+        return;
+    }
+
+    if (findFile(storage_file, file_path) == NULL) {
+        if (configuration_storage.PRINT_LOG == 2) {
+            fprintf(stderr, "The client %d want to execute an operation on not existing file\n", client);
+        }
+
+        sendStr(client, "File not exists");
+        free(file_content);
+        str_clearArray(&array, n);
+        return;
+    }
+
+    file_s *file = findFile(storage, file_path);
+    if(!file_isOpenedBy(file, pid_client)){
+        if(configuration_storage.PRINT_LOG == 2){
+            fprintf(stderr,"The client %d want to execute an operation on a not opened file\n", client);
+        }
+
+        sendStr(client, "File is not open");
+        free(file_content);
+        str_clearArray(&array, n);
+        return;
+    }else if(!file_isEmpty(file)){
+        if(configuration_storage.PRINT_LOG == 2){
+            fprintf(stderr, "The client %d want to write on a not empty file\n", client);
+        }
+
+        sendStr(client, "File not empty");
+        free(file_content);
+        str_clearArray(&array, n);
+        return;
+    }
+
+    if (file_size > storage_space) {
+        if (configuration_storage.PRINT_LOG == 2) {
+            fprintf(stderr, "CAPACITY MISSES\n");
+        }
+
+        sendStr(client, "Storage full of memory");
+        free_space(client, option, file_size);
+
+        if (file_size > storage_space) {
+            if (configuration_storage.PRINT_LOG == 1 || configuration_storage.PRINT_LOG == 2) {
+                fprintf(stderr, "Is not possible to free space\n\n");
+            }
+            free(file_content);
+            str_clearArray(&array, n);
+            sendStr(client, "Free error");
+            return;
+        }
+
+        if (configuration_storage.PRINT_LOG == 2) {
+            printf("Space freed\n");
+        }
+    }
+
+    assert(file->pathname != NULL && !str_isEmpty(file->pathname));
+    assert(storage_space <= configuration_storage.MAX_STORAGE_SPACE);
+
+    file_update(&f, file_content, file_size);
+    storage_space -= file_size;
+
+    sendStr(client, "Success");
+
+    str_clearArray(&array, n);
+
+    if(configuration_storage.PRINT_LOG == 1 || configuration_storage.PRINT_LOG == 2){
+        printf("Write completed\n"
+               "Capacity of storage: %d\n", storage_space);
+    }
+}
+
+void clear_openedFiles(char* key, void* value, bool* exit, void* client_pid){
+    file_s *file = (file_s *) value;
+    if(file_isOpenedBy(file, (char *) client_pid)){
+        file_clientClose(&file, (char *) client_pid);
+    }
+
+    key = key;
+    exit = exit;
+}
+
+void closeConnection(int client, char* client_pid){
+    int nfiles = *((int *)  findFile(opened_file, client_pid));
+
+    if(nfiles == 0){
+        sendStr(client, "Success");
+    }else {
+        if (configuration_storage.PRINT_LOG == 2) {
+            fprintf(stderr, "ATTENTION: the client %d hasn't close some files, closing...\n", client);
+        }
+
+        sendStr(client, "File not found on exit");
+        //tree_iterate();
+        if (configuration_storage.PRINT_LOG == 2) {
+            printf("Close completed\n");
+        }
+    }
+
+    assert((*((int *) getValue(opened_file, client_pid))) == 0);
+
+    deleteFile(opened_file, client_pid);
+    if(close(client) != 0){
+        fprintf(stderr, "ATTENTION: error in closing the socket with client %d\n", client);
+    }else if(configuration_storage.PRINT_LOG == 1 || configuration_storage.PRINT_LOG == 2){
+        printf("Client %d disconnected\n\n", client);
+    }
+
+    connected_clients--;
 }

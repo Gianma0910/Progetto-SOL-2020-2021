@@ -1,4 +1,4 @@
-#include "list1.h"
+#include "list.h"
 
 typedef struct queue{
     node* head;
