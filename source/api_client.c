@@ -86,7 +86,7 @@ int closeConnection(const char* sockname){
     }
 
     char* pid_client = str_long_toStr(getpid());
-    char* command = str_concat("cl:", pid_client);
+    char* command = str_concat("e:", pid_client);
 
     sendStr(fd_sk, command);
     free(pid_client);

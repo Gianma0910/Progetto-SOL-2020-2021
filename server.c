@@ -685,3 +685,244 @@ void* stop_server(void* args){
     return argv;
 }
 
+void *worker(void *args){
+    while(true){
+        int client = queue_get(&q);
+
+        pthread_mutex_lock(&lock);
+        if(!server_running || client == -1){
+            pthread_mutex_unlock(&lock);
+            return args;
+        }
+
+        char* request = receiveStr(client);
+
+        if(!str_isEmpty(request)){
+            if(configuration_storage.PRINT_LOG == 1 || configuration_storage.PRINT_LOG == 2){
+                printf("Request received: %s\n\n", request);
+            }
+            switch (request[0]) {
+                case 'a':{
+                    char* command = str_cut(request, 2, str_length(request)-2);
+                    appendFile(client, command);
+                    free(command);
+                    break;
+                }
+                case 'o':{
+                    char* command = str_cut(request, 2, str_length(request)-2);
+                    openFile(client, command);
+                    free(command);
+                    break;
+                }
+                case 'c':{
+                    char* command;
+                    if(request[1] == 'l'){
+                        command = str_cut(request, 3, str_length(request)-3);
+                        closeFile(client, command);
+                        free(command);
+                    }else{
+                        command = str_cut(request, 2, str_length(request)-2);
+                        createFile(client, command);
+                        free(command);
+                    }
+
+                    break;
+                }
+                case 'r':{
+                    char* command;
+                    if(request[1] == 'n'){
+                        command = str_cut(request, 3, str_length(request)-3);
+                        readNFile(client, command);
+                    }else if(request[1] == 'm'){
+                        command = str_cut(request, 3, str_length(request)-3);
+                        removeFile(client, command);
+                    }else{
+                        command = str_cut(request, 2, str_length(request)-2);
+                        readFile(client, command);
+                    }
+
+                    free(command);
+                    break;
+                }
+                case 'w':{
+                    char* command = str_cut(request, 2, str_length(request)-2);
+                    writeFile(client, command);
+                    free(command);
+                    break;
+                }
+                case 'e':{
+                    char* command = str_cut(request, 2, str_length(request)-2);
+                    closeConnection(client, command);
+                    free(cmd);
+                    break;
+                }
+                default:{
+                    assert(1 == 0);
+                }
+            }
+        }
+        pthread_mutex_unlock(&lock);
+
+        if(request[0] != 'e' || str_isEmpty(reqeust)){
+            if(writen(pipe_fd[1], &client, sizeof(int)) == -1){
+                fprintf(stderr, "An error occurred on write back client to the pipe\n");
+                exit(errno);
+            }
+        }
+
+        free(request);
+    }
+}
+
+void print_statistic(){
+    printf("Operations carried out\n");
+    printf("1. Number of file stored into the server: %lu\n", (configuration_storage.MAX_STORABLE_FILES-max_storable_files));
+    printf("2. Maximum dimension reached in Mbytes: %lu\n", (storage_space/1024/1024));
+    printf("3. Number of replacement of cache: %zu\n", fifo_counts);
+
+    if(!tree_isEmpty(storage_file)){
+        printf("List of files actually is in the server\n\n");
+        tree_iterate(storage_file, &print_files, NULL);
+    }else{
+        printf("The server is empty\n\n");
+    }
+
+    printf("Settings loaded:\n\n");
+    settings_print(configuration_storage);
+    printf("\n");
+}
+
+int main(int argc, char* argv[]){
+    char* config_path = NULL;
+    if(argc == 2){
+        if(str_startsWith(argv[1], "-c")){
+            char* command = (argv[1]) += 2;
+            config_path = realpath(command, NULL);
+            if(config_path == NULL){
+                fprintf(stderr, "File config not founded!\n"
+                                "Default settings will use\n\n");
+            }
+        }
+    }else if(argc > 2){
+        fprintf(stderr, "ATTENTION: command -c not valid\n\n");
+    }
+    initialization_server(config_path);
+    free(config_path);
+    sorted_list* fd_list = sortedlist_create();
+
+    int fd_sk = unix_socket(configuration_storage.SOCK_PATH);
+    if(socket_bind() != 0){
+        //...
+    }
+    pthread_t tid = 0;
+    pthread_t thread_pool[configuration_storage.N_THREAD_WORKERS];
+    for(int i = 0; i < configuration_storage.N_THREAD_WORKERS; i++){
+        pthread_create(&tid, NULL, &worker, NULL);
+        thread_pool[i] = tid;
+    }
+
+    pthread_attr_t thattr = {0};
+    pthread_attr_setdetachstate(&thattr, PTHREAD_CREATE_DETACHED);
+    if(pthread_create(&tid, &thattr, &stop_server, NULL) != 0){
+        fprintf(stderr, "Error: impossible to start the server in safety mode\n");
+        return -1;
+    }
+
+    fd_set current_sockets;
+
+    FD_ZERO(&current_sockets);
+    FD_SET(fd_sk, &current_sockets);
+    FD_SET(pipe_fd[0], &current_sockets);
+    sortedlist_insert(&fd_list, fd_sk);
+    sortedlist_insert(&fd_list, pipe_fd[0]);
+
+    int sreturn;
+    printf("Server is listening...\n\n");
+
+    while(server_running){
+        fd_set ready_sockets = current_sockets;
+        struct timeval tv = {MASTER_WAKEUP_SECONDS, MASTER_WAKEUP_MS};
+        if((sreturn = select(sortedlist_getMax(fd_list)+1, &ready_sockets, NULL, NULL, &tv)) < 0){
+            if(errno != EINTR){
+                fprintf(stderr, "Select error: value < 0\n"
+                                "Error code: %s\n\n", strerror(errno));
+            }
+            server_running = false;
+            break;
+        }
+
+        if(soft_close && connected_clients == 0){
+            break;
+        }
+
+        if(sreturn > 0){
+            sortedlist_iterate();
+            for(int i = 0; i <= sortedlist_getMax(fd_list); i++){
+                int setted_fd = sortedlist_getNext(fd_list);
+                if(FD_ISSET(setted_fd, &ready_sockets)){
+                    if(setted_fd == fd_sk){
+                        int client = socket_accept(fd_sk);
+                        if(client != -1){
+                            if(soft_close){
+                                if(configuration_storage.PRINT_LOG == 2){
+                                    fprintf(stderr, "CLient %d refused\n", client);
+                                }
+                                sendStr(client, "Not connected to socket");
+                                close(client);
+                                break;
+                            }
+                            if(configuration_storage.PRINT_LOG == 2){
+                                printf("Client %d connected\n", client);
+                            }
+                            sendStr(client, "Connected");
+
+                            char* pid_client = receiveStr(client);
+                            int *n = malloc(sizeof(int));
+                            if(n == NULL){
+                                fprintf(stderr, "Impossible to allocate for a new client\n");
+                                return errno;
+                            }
+                            *n = 0;
+                            tree_insert(opened_file, pid_client, n);
+                            free(pid_client);
+                            connected_clients++;
+                        }
+                        FD_SET(client, &current_sockets);
+                        sortedlist_insert(&fd_list, client);
+                        break;
+                    }else if(setted_fd == pipe_fd[0]){
+                        int old_fd_c;
+                        readn(pipe_fd[0], &old_fd_c, sizeof(int));
+                        FD_SET(old_fd_c, &current_sockets);
+                        sortedlist_insert(&fd_list, old_fd_c);
+
+                        break;
+                    }else{
+                        FD_CLR(setted_fd, &current_sockets);
+                        sortedlist_remove(&fd_list, setted_fd);
+                        queue_insert(&q, setted_fd);
+
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    queue_close(&q);
+    if(soft_close){
+        server_running = false;
+    }
+
+    for(int i = 0; i < configuration_storage.N_THREAD_WORKERS; i++){
+        pthread_join(thread_pool[i], NULL);
+    }
+
+    printf("Exit...\n");
+    sortedlist_destroy(&fd_list);
+
+    print_statistic();
+    close_server();
+
+    return 0;
+}
