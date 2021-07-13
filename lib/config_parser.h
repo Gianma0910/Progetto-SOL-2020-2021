@@ -1,4 +1,9 @@
 #define DEFAULT_SETTINGS {.N_THREAD_WORKERS=5, .MAX_STORAGE_SPACE=209715200, .MAX_STORABLE_FILES=100, .SOCK_PATH=NULL, .PRINT_LOG=1}
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stddef.h>
+
 typedef struct{
     size_t MAX_STORAGE_SPACE;
     unsigned int N_THREAD_WORKERS;

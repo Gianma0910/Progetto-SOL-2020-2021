@@ -1,7 +1,9 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <stddef.h>
 #include <errno.h>
 #include "../lib/config_parser.h"
 #include "../lib/file_reader.h"
@@ -78,7 +80,11 @@ void setConfigFor(settings *s, char *key, char *value){
         s->SOCK_PATH = str_create(new_path);
     }else if(str_equals(key, "PRINT_LOG")){
         if(str_toInteger(&converted_v, value) != 0){
-            fprintf(stderr, "PRINT_LOG option must be 0, 1 or 2");
+            fprintf(stderr, "Error on parsing [%s]: default valuet\n", key);
+            return;
+        }
+        if(converted_v != 0 && converted_v != 1 && converted_v != 2){
+            fprintf(stderr, "PRINT_LOG option must be 0, 1 or 2; Default vlaue set\n");
             return;
         }
         s->PRINT_LOG = converted_v;
@@ -120,7 +126,7 @@ void settings_free(settings *s){
     free(s->SOCK_PATH);
 }
 
-void setting_print(settings s){
+void settings_print(settings s){
     printf("MAX_STORABLE_FILES:\t\t\t");
     printf("%u\n", s.MAX_STORABLE_FILES);
 

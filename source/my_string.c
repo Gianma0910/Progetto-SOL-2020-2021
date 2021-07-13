@@ -1,5 +1,6 @@
 #define _GNU_IGNORE
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -12,7 +13,7 @@
 #define MAX 64 //ogni quanto rialloco l'array di string in split(s, delem)
 #define NUMB_OF_STR(x) (x*sizeof(char*))
 
-int str_lenght(const char *s){
+int str_length(const char *s){
     return (int) strlen(s);
 }
 
@@ -185,8 +186,8 @@ bool str_startsWith(const char *s, const char *prefix){
     if(!s || !prefix)
         return false;
 
-    int lenstr = str_lenght(s);
-    int lenprefix = str_lenght(prefix);
+    int lenstr = str_length(s);
+    int lenprefix = str_length(prefix);
 
     if(lenprefix > lenstr)
         return false;
@@ -202,8 +203,8 @@ bool str_endsWith(const char *s, const char *suffix){
     if(!s || !suffix)
         return false;
 
-    int lenstr = str_lenght(s);
-    int lensuffix = str_lenght(suffix);
+    int lenstr = str_length(s);
+    int lensuffix = str_length(suffix);
 
     if(lensuffix > lenstr)
         return false;
@@ -216,7 +217,7 @@ bool str_endsWith(const char *s, const char *suffix){
 }
 
 bool str_isEmpty(const char *s){
-    return str_lenght(s) == 0;
+    return str_length(s) == 0;
 }
 
 char* str_cut(const char *s, int from, int to){
@@ -233,7 +234,7 @@ char* str_cut(const char *s, int from, int to){
     strncpy(ret, s+from, to);
     ret[to] = '\0';
 
-    assert(str_lenght(ret) == to);
+    assert(str_length(ret) == to);
     return ret;
 }
 

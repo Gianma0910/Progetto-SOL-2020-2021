@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 typedef struct node {
     char* key;
     void *value;
@@ -10,9 +12,9 @@ typedef struct list {
     int length;
 } list;
 
-#ifndef HASH_TABLE_list_H
-#define HASH_TABLE_list_H
-#include <stdbool.h>
+#ifndef LIST_H
+#define LIST_H
+
 
 list *list_create();
 bool list_remove(list **l, char* key, void (*delete_value)(void* value));
@@ -21,4 +23,4 @@ node* list_getNode(list* l, char* key);
 void list_insert(list **l, char* key, void *value);
 void list_destroy(list** l, void (*delete_value)(void* value));
 bool list_containsKey(list* l, char* key);
-#endif //HASH_TABLE_list_H
+#endif

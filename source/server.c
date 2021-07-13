@@ -1,4 +1,4 @@
-#define _GNU_SOURCE_
+#define _GNU_SOURCE
 #include "lib/config_parser.h"
 #include "lib/my_tree1.h"
 #include "lib/my_tree2.h"

@@ -1,6 +1,6 @@
 #include <stdbool.h>
-#ifndef C_PROJECTS_MY_STRING_H
-#define C_PROJECTS_MY_STRING_H
+#ifndef MY_STRING_H
+#define MY_STRING_H
 
 char* str_create(const char* s);
 bool str_equals(const char* s1, const char* s2);
@@ -24,7 +24,7 @@ char* str_concatn(const char* s1, ...);
  * */
 int str_split(char*** output, const char* s, const char* delimiter);
 int str_splitn(char*** output, const char* s, const char* delimiter, int n);
-int str_startsWith(const char* s, const char* prefix);
+bool str_startsWith(const char* s, const char* prefix);
 bool str_endsWith(const char* s, const char* suffix);
 bool str_isEmpty(const char* s);
 char* str_cut(const char* s, int from, int to);

@@ -18,7 +18,7 @@ list *list_create(){
 }
 
 void insert_head(node **head, char *key, void *value){
-    node *element = (node *) malloc(sizeof(node1));
+    node *element = (node *) malloc(sizeof(node));
     if(element == NULL){
         fprintf(stderr, "Impossible create a new node\n");
         exit(errno);
@@ -31,7 +31,7 @@ void insert_head(node **head, char *key, void *value){
 }
 
 void insert_tail(node **tail, char *key, void *value){
-    node *element = (node *) malloc(sizeof(node1));
+    node *element = (node *) malloc(sizeof(node));
 
     if(element == NULL){
         fprintf(stderr, "Impossible create a new node\n");
@@ -102,7 +102,7 @@ bool list_isEmpty(list *l){
 
 void list_destroy(list **l, void (*delete_value)(void *value)){
     while((*l)->head != NULL){
-        node1 *curr = (*l)->head;
+        node *curr = (*l)->head;
         free(curr->key);
         if(delete_value != NULL)
             delete_value(curr->value);
@@ -127,7 +127,7 @@ void list_insert(list **l, char *key, void *value){
     (*l)->length++;
 }
 
-node1* list_getNode(list *l, char *key){
+node* list_getNode(list *l, char *key){
     node *head = l->head;
     node *tail = l->tail;
 

@@ -1,3 +1,7 @@
+#ifndef SORTED_LIST_H
+#define SORTED_LIST_H
+#include <stdbool.h>
+
 typedef struct elem{
     int value;
     struct elem *next;
@@ -17,3 +21,4 @@ void sortedlist_destroy(sorted_list** l);
 int sortedlist_getMax(sorted_list* l);
 int sortedlist_getNext(sorted_list* l);
 void sortedlist_iterate();
+#endif

@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include "../lib/stack.h"
 
-void push(Stack_node** top_ref, TreeNode* node){
+void push_node(Stack_node** top_ref, TreeNode* node){
     Stack_node* new_tnode = (Stack_node *) malloc(sizeof(Stack_node));
 
     new_tnode->node = node;
@@ -12,11 +12,11 @@ void push(Stack_node** top_ref, TreeNode* node){
     (*top_ref) = new_tnode;
 }
 
-TreeNode* pop(Stack_node** top_ref){
+TreeNode* pop_node(Stack_node** top_ref){
     TreeNode* res;
     Stack_node* top;
 
-    if(stack_isEmpty(*top_ref)){
+    if(stack_empty(*top_ref)){
         return NULL;
     }else{
         top = *top_ref;
@@ -27,7 +27,7 @@ TreeNode* pop(Stack_node** top_ref){
     }
 }
 
-bool stack_isEmpty(Stack_node* top){
+bool stack_empty(Stack_node* top){
     return top == NULL;
 }
 

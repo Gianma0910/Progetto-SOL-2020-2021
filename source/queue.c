@@ -5,12 +5,6 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <string.h>
-
-typedef struct node{
-    int value;
-    struct node* next;
-}node;
-
 #include "../lib/queue.h"
 
 pthread_mutex_t queue_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -28,8 +22,8 @@ queue* queue_create(){
     return q;
 }
 
-void queue_insert_head(node **head, int value){
-    node *element = (node *) malloc(sizeof(node));
+void queue_insert_head(node_queue **head, int value){
+    node_queue *element = (node_queue *) malloc(sizeof(node_queue));
 
     if(element == NULL){
         fprintf(stderr, "Impossible to create a new element\n");
@@ -41,8 +35,8 @@ void queue_insert_head(node **head, int value){
     *head = element;
 }
 
-void queue_insert_tail(node **tail, int value){
-    node *element = (node *) malloc(sizeof(node));
+void queue_insert_tail(node_queue **tail, int value){
+    node_queue *element = (node_queue *) malloc(sizeof(node_queue));
 
     if(element == NULL){
         fprintf(stderr, "Impossible to create a new element\n");
@@ -75,14 +69,14 @@ int queue_get(queue **q){
         return -1;
     }
 
-    node *curr = (*q)->head;
+    node_queue *curr = (*q)->head;
 
     if(curr == NULL){
         pthread_mutex_unlock(&queue_lock);
         return -1;
     }
 
-    node *succ = (*q)->head->next;
+    node_queue *succ = (*q)->head->next;
 
     if(succ == NULL){
         int r = curr->value;
@@ -102,10 +96,7 @@ int queue_get(queue **q){
 }
 
 bool queue_isEmpty(queue *q){
-    if(q->head == NULL)
-        return true;
-    else
-        return false;
+    return q->head == NULL;
 }
 
 void queue_insert(queue **q, int value){

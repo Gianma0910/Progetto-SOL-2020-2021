@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 int unix_socket(char* path){
-    int fd_sk = socket(AF_UNIX, SOCKSTREAM, 0);
+    int fd_sk = socket(AF_UNIX, SOCK_STREAM, 0);
     if(fd_sk == -1){
         fprintf(stderr, "socket creation error\n");
         return errno;
@@ -13,13 +13,13 @@ int unix_socket(char* path){
     return fd_sk;
 }
 
-int socket_bind(int fd_sk; char* path){
+int socket_bind(int fd_sk, char* path){
     struct sockaddr_un sa;
     strcpy(sa.sun_path, path);
     sa.sun_family = AF_UNIX;
 
     if((bind(fd_sk, (const struct sockaddr *) &sa, sizeof(sa))) == -1){
-        fprintf(stderr, "cannot bind\n");
+        fprintf(stderr, "Cannot bind\n");
         if(errno == EADDRINUSE){
             fprintf(stderr, "address already in use\n");
         }
@@ -41,7 +41,7 @@ size_t readn(int fd, void *buf, size_t size) {
     int r;
     void* bufptr = buf;
     while(left>0) {
-        if ((r = (int) read(fd ,bufptr, left)) == -1) {
+        if ((r = (int) read(fd, bufptr, left)) == -1) {
             if (errno == EINTR) continue;
             return -1;
         }
@@ -53,13 +53,13 @@ size_t readn(int fd, void *buf, size_t size) {
 }
 
 
-size_t writen(int fd, void *buf, size_t size){
+int writen(int fd, void *buf, size_t size){
     size_t left = size;
     int r;
     void* bufptr = buf;
 
     while(left > 0){
-        if((r = (int) write(fd. bufptr, left)) == -1){
+        if((r = (int) write(fd, bufptr, left)) == -1){
             if(errno == EINTR) continue;
             return -1;
         }
@@ -73,7 +73,7 @@ size_t writen(int fd, void *buf, size_t size){
 
 int sendInteger(int fd_sk, size_t n){
     if(writen(fd_sk, &n, sizeof(unsigned long)) == -1){
-        fprintf(stderr, "An error occured on sending message lenght\n");
+        fprintf(stderr, "An error occurred on sending message lenght\n");
         return errno;
     }
 
@@ -84,7 +84,7 @@ size_t receiveInteger(int fd_sk){
     size_t n = 0;
 
     if(readn(fd_sk, &n, sizeof(unsigned long)) == -1){
-        fprintf(stderr, "An error occured on reading message lenght\n");
+        fprintf(stderr, "An error occurred on reading message lenght\n");
         return errno;
     }
 
@@ -98,7 +98,7 @@ int sendn(int fd_sk, void *msg, size_t lenght){
     }
 
     if(writen(fd_sk, msg, lenght) == -1){
-        fprintf(stderr, "An error occured on sending message\n");
+        fprintf(stderr, "An error occurred on sending message\n");
         return errno;
     }
 
@@ -114,7 +114,7 @@ int sendFile(int fd_sk, const char *pathname){
     size_t fileSize = file_getsize(file);
 
     if(sendInteger(fd_sk, fileSize) != 0){
-        fprintf(stderr, "Error on sending dimension of file");
+        fprintf(stderr, "Error on sending dimension of file\n");
         return errno;
     }
     void *fileContent = file_readAll(file);
@@ -124,8 +124,8 @@ int sendFile(int fd_sk, const char *pathname){
     }
 
     if(writen(fd_sk, fileContent, fileSize) == -1){
-        fprintf(stderr, "An error occured on sending file\n");
-        return errno;
+        fprintf(stderr, "An error occurred on sending file\n");
+        exit(errno);
     }
 
     free(fileContent);
@@ -139,11 +139,11 @@ void receiveFile(int fd_sk, void** buff, size_t* lenght){
 
     *buff = malloc(size * sizeof(char));
     if(*buff == NULL){
-        fprintf(stderr, "Impossible receivem a file: full of memory\n");
+        fprintf(stderr, "Impossible receive a file: full of memory\n");
         exit(errno);
     }
     if(readn(fd_sk, *buff, size) == -1){
-        fprintf(stderr, "An error occured reading file\n");
+        fprintf(stderr, "An error occurred reading file\n");
         exit(errno);
     }
 }
@@ -160,10 +160,9 @@ char* receiveStr(int from){
         return NULL;
     }
     if(readn(from, buff, lenght) == -1){
-        fprintf(stderr, "An error occured on reading message\n");
+        fprintf(stderr, "An error occurred on reading message\n");
         return NULL;
     }
     buff[lenght] = '\0';
-
     return (char*) buff;
 }

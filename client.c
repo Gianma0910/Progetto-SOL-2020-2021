@@ -4,6 +4,7 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <stdbool.h>
 #include "lib/client_api.h"
 #include "lib/conn.h"
@@ -13,14 +14,31 @@
 char* sockname = NULL;
 int time_sleep = 0;
 bool p_op = false;
-struct timespec abstime;
+
+static struct timespec timespec_new(){
+    struct timespec timeToWait;
+    struct timeval now;
+
+    gettimeofday(&now, NULL);
+
+    timeToWait.tv_sec = now.tv_sec;
+    timeToWait.tv_nsec = (now.tv_usec + 1000UL * 1) * 1000UL;
+
+    return timeToWait;
+}
 
 void sendfile_toServer(const char* backup_folder, char* file){
     int errcode;
 
     if(openFile(file, O_CREATE) != 0){
         errcode = errno;
-        fprintf(stderr, "%d\n", errcode);
+        if(errcode == ENOENT){
+            fprintf(stderr, "File %s not found: %d\n", file, errcode);
+        }else if(errcode == EEXIST){
+            fprintf(stderr, "File %s already exists: %d\n", file, errcode);
+        }else if(errcode == EFBIG){
+            fprintf(stderr, "File %s too large: %d\n", file, errcode);
+        }
         return;
     }
     if(p_op)
@@ -28,7 +46,23 @@ void sendfile_toServer(const char* backup_folder, char* file){
     if(writeFile(file, backup_folder) != 0){
         fprintf(stderr, "writeFile: Not possible to send file %s to server\n", file);
         errcode = errno;
-        fprintf(stderr, "%d\n", errcode);
+        if(errcode == EINVAL){
+            fprintf(stderr, "Invalid argument: %d\n", errcode);
+        }else if(errcode == ENOENT){
+            fprintf(stderr, "File not found: %d\n", errcode);
+        }else if(errcode == EINTR){
+            fprintf(stderr, "Malloc error: %d\n", errcode);
+        }else if(errcode == EFBIG){
+            fprintf(stderr, "FIle too large: %d\n", errcode);
+        }else if(errcode == EPERM){
+            fprintf(stderr, "File not exists: %d\n", errcode);
+        }else if(errcode == EBADFD){
+            fprintf(stderr, "File not opened: %d\n", errcode);
+        }else if(errcode == ENOTSUP){
+            fprintf(stderr, "File not empty: %d\n", errcode);
+        }else if(errcode == ENOSPC){
+            fprintf(stderr, "Free error: %d\n", errcode);
+        }
     }else if(p_op){
         printf("File %s sent successfully\n", strrchr(file, '/')+1);
     }
@@ -57,8 +91,8 @@ void print_possible_command(){
 }
 
 int main(int argc, char* argv[]){
-    char* download_folder;
-    char* backup_folder;
+    char* download_folder = NULL;
+    char* backup_folder = NULL;
     char* my_argv[argc];
     int my_argc = 0;
     int error_code;
@@ -70,13 +104,15 @@ int main(int argc, char* argv[]){
         if(str_startsWith(argv[i], "-f")){
             found = true;
             sockname = ((argv[i])+=2);
-            if(openConnection(sockname, 0, abstime) != 0){
+            if(openConnection(sockname, 0, timespec_new()) != 0){
                 error_code = errno;
-                fprintf(stderr, "%d\n", error_code);
-                exit(errno);
+                if(error_code == EACCES){
+                    fprintf(stderr, "Not connected to socket: %d\n", error_code);
+                    exit(errno);
+                }
             }
         }else if(str_startsWith(argv[i], "-d")){
-            download_folder = ((arg[i])+=2);
+            download_folder = ((argv[i])+=2);
         }else if(str_startsWith(argv[i], "-D")){
             backup_folder = ((argv[i])+=2);
         }else if(str_startsWith(argv[i], "-p")){
@@ -109,8 +145,8 @@ int main(int argc, char* argv[]){
     }
 
     int option;
-    while((opt = getopt(my_argc, my_argv, ":h:w:W:r:R:c:")) != -1){
-        switch (opt) {
+    while((option = getopt(my_argc, my_argv, ":h:w:W:r:R:c:")) != -1){
+        switch (option) {
             case 'h':{
                 print_possible_command();
                 break;
@@ -161,6 +197,13 @@ int main(int argc, char* argv[]){
                         if(readFile(files[i], &buffer, &size) != 0){
                             fprintf(stderr, "ReadFile: Error in file %s\n", files[i]);
                             error_code = errno;
+                            if(error_code == EINVAL){
+                                fprintf(stderr, "Invalid argument: %d\n", error_code);
+                            }else if(error_code == EPERM){
+                                fprintf(stderr, "File not exists: %d\n", error_code);
+                            }else if(error_code == EACCES){
+                                fprintf(stderr, "File not opened: %d\n", error_code);
+                            }
                             fprintf(stderr, "%d\n", error_code);
                         }else{
                             char* file_name = strrchr(files[i], '/')+1;
@@ -192,12 +235,22 @@ int main(int argc, char* argv[]){
                         if(closeFile(files[i]) != 0){
                             fprintf(stderr, "CloseFile: error in closing the file %s\n", files[i]);
                             error_code = errno;
-                            fprintf(stderr, "%d\n", error_code);
+                            if(error_code == EINVAL){
+                                fprintf(stderr, "Invalid argument: %d\n", error_code);
+                            }else if(error_code == ENOENT){
+                                fprintf(stderr, "File not found: %d\n", error_code);
+                            }else if(error_code == EACCES){
+                                fprintf(stderr, "File not opened: %d\n", error_code);
+                            }
                         }
                     }else{
                         fprintf(stderr, "OpenFile: Error in opening the file %s\n", files[i]);
                         error_code = errno;
-                        fprintf(stderr, "%d\n", error_code);
+                        if(error_code == ENOENT){
+                            fprintf(stderr, "File not found: %d\n", error_code);
+                        }else if(error_code){
+                            fprintf(stderr, "File already opened: %d\n", error_code);
+                        }
                     }
                     usleep(time_sleep*1000);
                 }
@@ -215,7 +268,11 @@ int main(int argc, char* argv[]){
                 }
                 if(readNfiles(n, download_folder) != 0){
                     error_code = errno;
-                    fprintf(stderr, "%d\n", error_code);
+                    if(error_code == EINVAL){
+                        fprintf(stderr, "Invalid path of a file: %d\n", error_code);
+                    }else if(error_code == EPERM) {
+                        fprintf(stderr, "Storage empty: %d\n", error_code);
+                    }
                 }else if(p_op){
                     printf("Received %d file\n", n);
                 }
@@ -228,7 +285,11 @@ int main(int argc, char* argv[]){
                     if(removeFile(files[i]) != 0){
                         error_code = errno;
                         fprintf(stderr, "RemoveFile: file error %s\n", files[i]);
-                        fprintf(stderr, "%d\n", error_code);
+                        if(error_code == ENOENT){
+                            fprintf(stderr, "File not found: %d\n", error_code);
+                        }else if(error_code == EBADFD){
+                            fprintf(stderr, "File already opened: %d\n", error_code);
+                        }
                     }else if(p_op){
                         printf("File %s successfully removed\n\n", files[i]);
                     }
@@ -246,8 +307,17 @@ int main(int argc, char* argv[]){
     }
 
     if(closeConnection(sockname) != 0){
+        fprintf(stderr, "Error in close connection\n");
         error_code = errno;
-        fprintf(stderr, "%d\n", error_code);
+        if(error_code == EINVAL){
+            fprintf(stderr, "NULL socket: %d\n", error_code);
+        }else if(error_code == ESOCKTNOSUPPORT){
+            fprintf(stderr, "Wrong socket: %d\n", error_code);
+        }else if(error_code == EEXIST){
+            fprintf(stderr, "File found on exit: %d\n", error_code);
+        }else if(error_code == EBADF){
+            fprintf(stderr, "Bad socket: %d\n", error_code);
+        }
     }
 
     return 0;

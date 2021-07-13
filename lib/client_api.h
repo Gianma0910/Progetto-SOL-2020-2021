@@ -8,7 +8,7 @@
 int openConnection(const char *sockname, int msec, const struct timespec abstime);
 int closeConnection(const char *sockname);
 int openFile(const char* pathname, int flags);
-int readFile(const char *pathname, viod **buffer, size_t size);
+int readFile(const char *pathname, void **buffer, size_t* size);
 int readNfiles(int N, const char* dirname);
 int writeFile(const char *pathname, const char *dirname);
 int closeFile(const char *pathname);

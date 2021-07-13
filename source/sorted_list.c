@@ -71,7 +71,7 @@ bool sortedlist_remove(sorted_list **l, int value){
 
     if(curr->value == value){
         *head = curr->next;
-        free(cur);
+        free(curr);
         (*l)->size--;
         return true;
     }

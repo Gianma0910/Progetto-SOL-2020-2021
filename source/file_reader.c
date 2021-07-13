@@ -26,7 +26,7 @@ void* file_readAll(FILE *file){
 
     void *buffer = malloc(sizeof(char) * file_size);
     if(buffer == NULL){
-        fprintf(stderr, "Impossible allocate space\n");
+        fprintf(stderr, "Impossible allocate space: file_readAll() malloc error\n");
         return NULL;
     }
     fread(buffer, sizeof(char), file_size, file);
@@ -52,7 +52,7 @@ bool is_directory(const char *file){
     return S_ISDIR(p.st_mode);
 }
 
-int file_scanAllDir(char ***outpt, char* init_dir){
+int file_scanAllDir(char ***output, char* init_dir){
     return file_nscanAllDir(output, init_dir, -1);
 }
 
@@ -83,7 +83,7 @@ int file_nscanAllDir(char ***output, char *init_dir, int n) {
         }
         char *file_name = file->d_name;
 
-        if (strcmp(".", file_name) != 0 && strcmp("..", filename) != 0 && file_name[0] != '.') {
+        if (strcmp(".", file_name) != 0 && strcmp("..", file_name) != 0 && file_name[0] != '.') {
             file_name = str_concatn(init_dir, "/", file_name, NULL);
             char *file_path = realpath(file_name, NULL);
             assert(file_path != NULL);

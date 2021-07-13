@@ -21,20 +21,33 @@ Tree* init_tree(unsigned int size){
     return new_tree;
 }
 
-TreeNode* makeEmpty(TreeNode* root){
+void makeEmpty(Tree* tree, void (*delete_value)(void*)){
     pthread_mutex_lock(&tree_lock);
 
-    if(root != NULL){
+    if(tree->root == NULL){
         pthread_mutex_unlock(&tree_lock);
-        makeEmpty(root->left);
-        pthread_mutex_unlock(&tree_lock);
-        makeEmpty(root->right);
-        free(root);
+        return;
+    }
+
+    Stack_node* stack;
+
+    push_node(&stack, tree->root);
+    while(!stack_empty(stack)){
+        TreeNode* node = pop_node(&stack);
+
+        if(node->left != NULL)
+            push_node(&stack, node->left);
+        if(node->right != NULL)
+            push_node(&stack, node->right);
+
+        if(delete_value != NULL){
+            delete_value(node);
+        }
+
+        free(node);
     }
 
     pthread_mutex_unlock(&tree_lock);
-
-    return NULL;
 }
 
 Tree* tree_insert(Tree* tree, char* key, void* value){
@@ -80,16 +93,18 @@ void* tree_find(Tree* tree, char* key){
         return NULL;
     }
 
-    while(tree->root != NULL && strncmp(tree->root->key, key, str_length(key)) == 0){
-        if(strncmp(key, tree->root->key, str_length(key)) > 0){
-            tree->root = tree->root->right;
-        }else if(strncmp(key, tree->root->key, str_length(key)) < 0){
-            tree->root = tree->root->left;
+    TreeNode* curr = tree->root;
+
+    while(curr != NULL && strncmp(curr->key, key, str_length(key)) != 0){
+        if(strncmp(key, curr->key, str_length(key)) > 0){
+            curr = curr->right;
+        }else if(strncmp(key, curr->key, str_length(key)) < 0){
+            curr = curr->left;
         }
     }
 
     pthread_mutex_unlock(&tree_lock);
-    return tree->root;
+    return curr;
 }
 
 TreeNode* tree_find_min(Tree* tree) {
@@ -100,12 +115,14 @@ TreeNode* tree_find_min(Tree* tree) {
         return NULL;
     }
 
-    while(tree->root->left != NULL){
-        tree->root = tree->root->left;
+    TreeNode* curr = tree->root;
+
+    while(curr->left != NULL){
+        curr = curr->left;
     }
 
     pthread_mutex_unlock(&tree_lock);
-    return tree->root;
+    return curr;
 }
 
 TreeNode* tree_find_max(Tree* tree){
@@ -116,79 +133,85 @@ TreeNode* tree_find_max(Tree* tree){
         return NULL;
     }
 
-    while(tree->root->right != NULL){
-        tree->root = tree->root->right;
+    TreeNode* curr = tree->root;
+
+    while(curr->right != NULL){
+        curr = curr->right;
     }
 
     pthread_mutex_unlock(&tree_lock);
-    return tree->root;
+    return curr;
 }
 
-Tree* tree_delete(Tree* tree, char* key){
+void tree_delete(Tree** tree, char* key, void (*delete_value)(void*)){
     pthread_mutex_lock(&tree_lock);
 
-    TreeNode* node = tree->root;
+    TreeNode* node = (*tree)->root;
     TreeNode* parent = NULL;
 
-    while(node != NULL){
-        if(strncmp(node->key, key, str_length(key)) > 0){
-            parent = node;
-            node = node->left;
-        }else if(strncmp(node->key, key, str_length(key)) < 0)){
-            parent = node;
+    while(node != NULL && strncmp(node->key, key, str_length(key)) != 0){
+        parent = node;
+        if(strncmp(key, node->key, str_length(key)) > 0){
             node = node->right;
         }else{
-            if(node->left == NULL && node->right == NULL){
-                if(parent->left == NULL)
-                    parent->left = NULL;
-                else
-                    parent->right = NULL;
-
-                node = NULL;
-
-                break;
-            }else{
-                if(node->left == NULL){
-                    if(parent->right == node)
-                        parent->right = node->right;
-                    else if(parent->left == node)
-                        parent->left = node->right;
-
-                    node = NULL;
-
-                    break;
-                }else if(node->right == NULL){
-                    if(parent->left == node)
-                        parent->left = node->left;
-                    else if(parent->right == node)
-                        parent->right = node->left;
-
-                    node = NULL;
-                    break;
-                }else{
-                    TreeNode* temp = node;
-                    TreeNode* px = NULL;
-                    temp = temp->right;
-                    while(temp->left != NULL){
-                        px = temp;
-                        temp = temp->left;
-                    }
-                    node->key = temp->key;
-                    if(px->left == temp)
-                        px->left = NULL;
-                    else if(px->right == temp)
-                        px->right = NULL;
-
-                    temp = NULL;
-                    break;
-                }
-            }
+            node = node->left;
         }
     }
 
+    if(node == NULL){
+        pthread_mutex_unlock(&tree_lock);
+        return;
+    }
+
+    if(node->left == NULL || node->right == NULL){
+        TreeNode* new_node;
+        if(node->left == NULL)
+            new_node = node->right;
+        else
+            new_node = node->left;
+
+        if(parent == NULL){
+            pthread_mutex_unlock(&tree_lock);
+            return;
+        }
+
+
+        if(node == parent->left)
+            parent->left = new_node;
+        else
+            parent->right = new_node;
+
+        if(delete_value != NULL){
+            delete_value(node);
+        }
+        free(node);
+    }else{
+        TreeNode* p = NULL;
+        TreeNode* temp;
+
+        temp = node->right;
+        while(temp->left != NULL){
+            p = temp;
+            temp = temp->left;
+        }
+
+        if(p != NULL)
+            p->left = temp->right;
+        else
+            node->right = temp->right;
+
+        node->key = temp->key;
+
+        if(delete_value != NULL){
+            delete_value(temp);
+        }
+        free(temp);
+    }
+
     pthread_mutex_unlock(&tree_lock);
-    tree->current_size--;
-    return tree;
+    (*tree)->current_size--;
+    return;
+
 }
 
 Tree* tree_update_value(Tree* tree, char* key, void* new_value){
@@ -201,7 +224,7 @@ Tree* tree_update_value(Tree* tree, char* key, void* new_value){
 
     TreeNode* node = tree->root;
 
-    while(node != NULL && strncmp(node->key, key, str_length(key)) == 0){
+    while(node != NULL && strncmp(node->key, key, str_length(key)) != 0){
         if(strncmp(key, node->key, str_length(key)) > 0){
             node = node->right;
         }else if(strncmp(key, node->key, str_length(key)) < 0){
@@ -233,7 +256,7 @@ void* tree_get_value(Tree* tree, char* key){
 
     TreeNode* node = tree->root;
 
-    while(node != NULL && strncmp(node->key, key, str_length(key)) == 0){
+    while(node != NULL && strncmp(node->key, key, str_length(key)) != 0){
         if(strncmp(key, node->key, str_length(key)) > 0){
             node = node->right;
         }else if(strncmp(key, node->key, str_length(key)) < 0){
@@ -259,13 +282,13 @@ void tree_iterate(Tree* tree, void (*function)(char*, void*, bool*, void*), void
 
     while(!exit && num_files < tree->max_size){
         if(curr != NULL){
-            push(&stack, curr);
+            push_node(&stack, curr);
             function(curr->key, curr->value, &exit, args);
             curr = curr->left;
             num_files++;
         }else{
-            if(!stack_isEmpty(stack)){
-                curr = pop(&stack);
+            if(!stack_empty(stack) && num_files < tree->max_size){
+                curr = pop_node(&stack);
                 curr = curr->right;
             }else{
                 exit = 1;
@@ -278,7 +301,7 @@ void tree_iterate(Tree* tree, void (*function)(char*, void*, bool*, void*), void
 
 void tree_iterateN(Tree* tree, void (*function)(char*, void*, bool*, void*), void* args, int n){
     if(n > tree->max_size || n <= 0){
-        tree_iterate(table, f, args);
+        tree_iterate(tree, function, args);
         return;
     }
     pthread_mutex_lock(&tree_lock);
@@ -289,14 +312,14 @@ void tree_iterateN(Tree* tree, void (*function)(char*, void*, bool*, void*), voi
 
     while(!exit && num_files < tree->max_size && n > 0){
         if(curr != NULL){
-            push(&stack, curr);
+            push_node(&stack, curr);
             function(curr->key, curr->value, &exit, args);
             curr = curr->left;
             num_files++;
             n--;
         }else{
-            if(!stack_isEmpty(stack)){
-                curr = pop(&stack);
+            if(!stack_empty(stack) && n > 0){
+                curr = pop_node(&stack);
                 curr = curr->right;
             }else{
                 exit = 1;

@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -28,50 +29,65 @@ void exit_function(){
     }
 }
 
-int openConnection(const char* sockname, int msec, const struct timespec abstime){
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    abstime.tv_sec = now.tv_sec+msec;
-    abstime.tv_nsec = (now.tv_usec+1000UL*1)*1000UL;
-    fd_sk = socket(AF_UNIX, SOCK_STREAM, 0);
-    struct sockaddr_un sa;
-    strcpy(sa.sun_path, sockname);
-    sa.sun_family = AF_UNIX;
-    pthread_t tid;
-    pthread_create(&tid, NULL, &stop, &abstime);
-
-    while(run){
-        int status = connect(fd_sk, (struct sockaddr*) &sa, sizeof(sa));
-        if(status == 0){
-            char* status_connection = receiveStr(fd_sk);
-            if(!str_equals(status_connection, "Not connected to socket")){
-                errno = EBADF;
-                pthread_join(tid, NULL);
-                return -1;
-            }else{
-                current_sock = str_create(sockname);
-                char* pid_client = str_long_toStr(getpid());
-                sendn(fd_sk, pid_client, str_length(pid_client));
-                atexit(exit_function);
-                connected = true;
-                return 0;
-            }
-            usleep(msec*1000);
-        }
-        pthread_join(tid, NULL);
-        errno = EBADF;
-        return -1;
-    }
-}
-
 static void *stop(void *arg){
-    struct timespec timeToWait = (*(struct timespec) *arg);
+    struct timespec *timeToWait = (struct timespec *) arg;
     pthread_mutex_lock(&lock);
     pthread_cond_timedwait(&cond, &lock, timeToWait);
     run = false;
     pthread_mutex_unlock(&lock);
 
-    return;
+    return NULL;
+}
+
+int openConnection(const char* sockname, int msec, const struct timespec abstime){
+    fd_sk = socket(AF_UNIX, SOCK_STREAM, 0);
+    struct sockaddr_un sa;
+    strcpy(sa.sun_path, sockname);
+    sa.sun_family = AF_UNIX;
+
+    int status = connect(fd_sk, (struct sockaddr*) &sa, sizeof(sa));
+    if(status == 0){
+        char* status_connection = receiveStr(fd_sk);
+        if(str_equals(status_connection, "Not connected to socket")){
+            errno = EACCES;
+            return -1;
+        }
+        current_sock = str_create(sockname);
+        char* pid_client = str_long_toStr(getpid());
+        sendn(fd_sk, pid_client, str_length(pid_client));
+
+        atexit(exit_function);
+        connected = true;
+        free(pid_client);
+        return 0;
+    }
+
+    pthread_t tid;
+    pthread_create(&tid, NULL, &stop, (void *) &abstime);
+
+    while(run){
+        status = connect(fd_sk, (struct sockaddr*) &sa, sizeof(sa));
+        if(status == 0){
+            char* status_connection = receiveStr(fd_sk);
+            if(str_equals(status_connection, "Not connected to socket")){
+                errno = EACCES;
+                pthread_join(tid, NULL);
+                return -1;
+            }else if(str_equals(status_connection, "Connected")){
+                current_sock = str_create(sockname);
+                char* pid_client = str_long_toStr(getpid());
+                sendn(fd_sk, pid_client, str_length(pid_client));
+                atexit(exit_function);
+                connected = true;
+                free(pid_client);
+                return 0;
+            }
+            usleep(msec*1000);
+        }
+    }
+    pthread_join(tid, NULL);
+    errno = EBADF;
+    return -1;
 }
 
 int closeConnection(const char* sockname){
@@ -81,7 +97,7 @@ int closeConnection(const char* sockname){
     }
 
     if(!str_equals(current_sock, sockname)){
-        errno = EINVAL;
+        errno = ESOCKTNOSUPPORT;
         return -1;
     }
 
@@ -94,8 +110,8 @@ int closeConnection(const char* sockname){
 
     char* answer = receiveStr(fd_sk);
 
-    if(str_equals(answer, "Unsuccess")){
-        errno = ENOENT;
+    if(str_equals(answer, "File found on exit")){
+        errno = EEXIST;
         return -1;
     }
 
@@ -104,7 +120,7 @@ int closeConnection(const char* sockname){
         free(current_sock);
         return 0;
     }else{
-        errno = ENOENT;
+        errno = EBADF;
         return -1;
     }
 }
@@ -121,7 +137,8 @@ int openFile(const char* pathname, int flags){
     if(flags == O_CREATE){
         char* abs_path = realpath(pathname, NULL);
         if(abs_path == NULL){
-            errno = EPERM;
+            errno = ENOENT;
+            free(pid_client);
             return -1;
         }else{
             FILE* file = fopen(abs_path, "rb");
@@ -136,7 +153,7 @@ int openFile(const char* pathname, int flags){
             if(str_equals(answer, "Storage full of memory")){
                 while(!str_equals(receiveStr(fd_sk), "End of file from storage")){
                     char* s = receiveStr(fd_sk);
-                    printf("Il file %s è stato espulso dallo storage\n", strrchr(s, '/')+1);
+                    printf("Il file %s è stato espulso dallo storage\n", (strrchr(s, '/')+1));
                     free(s);
                 }
                 answer = receiveStr(fd_sk);
@@ -144,17 +161,24 @@ int openFile(const char* pathname, int flags){
                 free(command);
                 free(abs_path);
                 free(pid_client);
-                errno = EINTR;
-                return -1;
+                if(str_equals(answer, "File already exists")){
+                    errno = EEXIST;
+                    return -1;
+                }else if(str_equals(answer, "File too large")){
+                    errno = EFBIG;
+                    return -1;
+                }
+            }else if(str_equals(answer, "Success")){
+                free(command);
+                free(abs_path);
+                free(pid_client);
             }
-
-            free(cmd);
-            free(abs_path);
 
             return 0;
         }
     }else if(flags == O_LOCK){
-        errno = EACCES;
+        errno = ENOTSUP;
+        free(pid_client);
         return -1;
     }else if(flags == O_OPEN){
         char* command = str_concatn("o:", pathname, ":", pid_client, NULL);
@@ -163,20 +187,27 @@ int openFile(const char* pathname, int flags){
         answer = receiveStr(fd_sk);
 
         if(!str_equals(answer, "Success")){
-            errno = EINTR;
-            return -1;
+            if(str_equals(answer, "File not found")){
+                errno = ENOENT;
+                free(pid_client);
+                return -1;
+            }else if(str_equals(answer, "File already opened")){
+                errno = EACCES;
+                free(pid_client);
+                return -1;
+            }
         }
         free(command);
+        free(pid_client);
         return 0;
     }else{
         errno = EINVAL;
+        free(pid_client);
         return -1;
     }
-
-    free(pid_client);
 }
 
-int readFile(const char* pathname, void **buf, size_t size){
+int readFile(const char* pathname, void **buf, size_t* size){
     if(pathname == NULL){
         errno = EINVAL;
         return -1;
@@ -186,20 +217,27 @@ int readFile(const char* pathname, void **buf, size_t size){
     char* command = str_concatn("r:", pathname, ":", pid_client, NULL);
 
     sendStr(fd_sk, command);
-    answer = receiveStr(fd_sk);
+    char* answer = receiveStr(fd_sk);
 
-    if(str_equals(answer, "Already exists")){
-        receiveFile(fd_sk, buf, &size);
+    if(str_equals(answer, "Success")){
+        receiveFile(fd_sk, buf, size);
         free(command);
         free(pid_client);
 
         return 0;
-    }else{
+    }else if(str_equals(answer, "File not exist")){
         free(pid_client);
         free(command);
         errno = EPERM;
         return -1;
+    }else if(str_equals(answer, "File not opened")){
+        free(pid_client);
+        free(command);
+        errno = EACCES;
+        return -1;
     }
+
+    return -1;
 }
 
 int readNfiles(int N, const char* dirname){
@@ -220,7 +258,7 @@ int readNfiles(int N, const char* dirname){
 
     char* answer = receiveStr(fd_sk);
 
-    if(!str_equals(answer, "No problem of request")){
+    if(str_equals(answer, "Storage empty")){
         errno = EPERM;
         return -1;
     }
@@ -233,6 +271,8 @@ int readNfiles(int N, const char* dirname){
             char* file_path = receiveStr(fd_sk);
             char* file_name = strrchr(file_path, '/')+1;
             char* path = str_concat(dir, file_name);
+
+            receiveFile(fd_sk, &buffer, &size);
 
             FILE* file = fopen(path, "wb");
             if(file == NULL){
@@ -277,27 +317,27 @@ int writeFile(const char* pathname, const char* dirname){
     char* abs_path = realpath(pathname, NULL);
 
     if(abs_path == NULL){
-        errno = EINVAL;
+        errno = ENOENT;
         return -1;
     }
 
     char* command;
 
     if(dirname != NULL){
-        command = str_concatn("w:", abs_path, ":", pid_client, "?y", NULL);
+        command = str_concatn("w:", abs_path, ":", pid_client, "?", "y", NULL);
     }else{
-        command = str_concatn("w:", abs_path, ":", pid_client, "?y", NULL);
+        command = str_concatn("w:", abs_path, ":", pid_client, "?", "n", NULL);
     }
 
     sendStr(fd_sk, command);
 
     if(sendFile(fd_sk, pathname) == -1){
-        errno = EACCES;
+        errno = EINTR;
         return -1;
     }
 
     free(abs_path);
-    free(request);
+    free(command);
     free(pid_client);
 
     char* answer = receiveStr(fd_sk);
@@ -306,12 +346,27 @@ int writeFile(const char* pathname, const char* dirname){
         return 0;
     }
 
-    if(str_equals(answer, "Storage full of memory")){
+    if(str_equals(answer, "File too large")){
+        errno = EFBIG;
+        return -1;
+    }
+
+    if(str_equals(answer, "File not exists")){
         errno = EPERM;
         return -1;
     }
 
-    if(dirname != NULL){
+    if(str_equals(answer, "File not opened")){
+        errno = EBADFD;
+        return -1;
+    }
+
+    if(str_equals(answer, "File not empty")){
+        errno = ENOTSUP;
+        return -1;
+    }
+
+    if(dirname != NULL && str_equals(answer, "Storage full of memory")){
         char* dir = NULL;
 
         if(!str_endsWith(dirname, "/")){
@@ -324,6 +379,7 @@ int writeFile(const char* pathname, const char* dirname){
             char* file_path = receiveStr(fd_sk);
             char* file_name = strrchr(file_path, '/')+1;
             char* path = str_concat(dir, file_name);
+            printf("Writing the file %s into directory %s...\n", file_name, dir);
 
             void* buffer;
             size_t n;
@@ -335,6 +391,7 @@ int writeFile(const char* pathname, const char* dirname){
                 fprintf(stderr, "Impossibile creare un nuovo file, libera spazio\n");
             }else{
                 fwrite(buffer, sizeof(char), n, file);
+                printf("Download completato!\n\n");
                 fclose(file);
             }
             free(buffer);
@@ -348,7 +405,7 @@ int writeFile(const char* pathname, const char* dirname){
 
     answer = receiveStr(fd_sk);
     if(!str_equals(answer, "Success")){
-        errno = EINTR;
+        errno = ENOSPC;
         return -1;
     }
     return 0;
@@ -369,10 +426,16 @@ int closeFile(const char* pathname){
     free(pid_client);
 
     char* answer = receiveStr(fd_sk);
-    if(!str_equals(answer, "File closed")){
-        errno = EINTR;
-        return -1;
+    if(!str_equals(answer, "Success")){
+        if(str_equals(answer, "File not found")){
+            errno = ENOENT;
+            return -1;
+        }else if(str_equals(answer, "File not opened")){
+            errno = EACCES;
+            return -1;
+        }
     }
+
     return 0;
 }
 
@@ -386,11 +449,18 @@ int removeFile(const char* pathname){
     sendStr(fd_sk, command);
 
     char* answer = receiveStr(fd_sk);
-    if(!str_equals(answer, "File eliminated")){
-        errno = EINTR;
-        return -1;
-    }else
-        return 0;
+    if(!str_equals(answer, "Success")){
+        if(str_equals(answer, "File not found")){
+            errno = ENOENT;
+            return -1;
+        }else if(str_equals(answer, "File still open")){
+            errno = EBADFD;
+            return -1;
+        }
+    }
+
+    free(command);
+    return 0;
 }
 
 int appendToFile(const char* pathname, void* buf, size_t size, const char* dirname){
@@ -414,15 +484,30 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
         return 0;
     }
 
-    if(!str_equals(answer, "Storage full of memory")){
+    if(str_equals(answer, "File too large")){
+        errno = EFBIG;
+        return -1;
+    }
+
+    if(str_equals(answer, "File not exists")){
         errno = EPERM;
         return -1;
     }
 
-    if(dirname != NULL){
+    if(str_equals(answer, "File not opened")){
+        errno = EBADFD;
+        return -1;
+    }
+
+    if(str_equals(answer, "File not empty")){
+        errno = ENOTSUP;
+        return -1;
+    }
+
+    if(dirname != NULL && str_equals(answer, "Storage full of memory")){
         char* dir = NULL;
 
-        if(!str_endsWith(dirname. "/")){
+        if(!str_endsWith(dirname, "/")){
             dir = str_concat(dirname, "/");
         }else{
             dir = str_create(dirname);
@@ -433,6 +518,8 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
             char* file_path = receiveStr(fd_sk);
             char* file_name = strrchr(file_path, '/')+1;
             char* path = str_concat(dir, file_name);
+
+            printf("Scrittura del file %s nella cartella %s in corso...\n\n", file_name, dir);
 
             void* buffer;
             size_t n;
@@ -447,6 +534,7 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
             free(buffer);
             free(path);
             free(file_path);
+            printf("Download completato!\n\n");
         }
         free(dir);
     }else{
@@ -455,6 +543,13 @@ int appendToFile(const char* pathname, void* buf, size_t size, const char* dirna
 
     answer = receiveStr(fd_sk);
     if(!str_equals(answer, "Success")){
+        if(str_equals(answer, "Free error")){
+            errno = ENOSPC;
+            return -1;
+        }else if(str_equals(answer, "Malloc error")){
+            errno = ENOMEM;
+            return -1;
+        }
         errno = EINTR;
         return -1;
     }
